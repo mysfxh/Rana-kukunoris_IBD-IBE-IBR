@@ -1,0 +1,397 @@
+##########IBD_rawdata_cal
+# 安装并加载必要的包
+install.packages("geosphere")
+library(geosphere)
+# 读取CSV文件
+data <- read.csv("H://2025//ME//GYLW.csv")
+# 提取经纬度坐标
+coordinates <- data[, c("Longitude", "Latitude")]
+coordinates
+data$Name
+# 计算距离矩阵
+distance_matrix <- as.matrix(distm(coordinates)/1000)
+distance_matrix
+row_col_names <- if (is.factor(data$Name)) levels(data$Name)[data$Name] else as.character(data$Name)
+# 创建一个数据框，设置行名和列名
+distance_df <- data.frame(distance_matrix)
+rownames(distance_df) <- row_col_names
+colnames(distance_df) <- row_col_names
+# 将距离矩阵写入CSV文件
+write.csv(distance_df, "H://2025//ME//distance_matrixnew.csv", row.names = TRUE)
+
+
+
+##########IBE_rawdata_cal
+install.packages("writexl")
+install.packages("readxl")
+library(readxl)
+library(writexl)
+
+# 读取Excel文件
+setwd("H://2025//ME//new1//IBE//")
+data <- read_excel("H://2025//ME//new1//IBE//rawdata.xlsx")
+
+# 查看数据
+data
+
+# 提取NAME列和数值列
+names <- data$Name                # 第一列名称
+value_columns <- colnames(data)[-1]  # 除NAME外的数值列
+
+# 创建输出文件夹
+output_folder <- "pairwise_matricesscale" 
+dir.create(output_folder, showWarnings = FALSE)  # 若文件夹不存在则创建
+
+# 循环处理每一列：标准化数据，生成差值矩阵并分别保存
+for (col in value_columns) {
+  values <- data[[col]]                            # 提取当前列数据
+  
+
+  scaled_values <- as.vector(scale(values))     
+  
+  # 计算pairwise绝对差值矩阵
+  diff_matrix <- abs(outer(scaled_values, scaled_values, "-"))
+  
+  # 转换为数据框并设置行名和列名
+  diff_df <- as.data.frame(diff_matrix)
+  rownames(diff_df) <- names   # 设置行名
+  colnames(diff_df) <- names   # 设置列名
+  
+  # 在首列添加 NAME 列，确保 Excel 文件中也能保留行名
+  diff_df <- cbind("NAME" = names, diff_df)
+  
+  # 保存为单独的Excel文件，每列生成一个文件
+  output_file <- file.path(output_folder, paste0(col, "_pairwise_scaled.csv"))
+  write.csv(diff_df, file = output_file, row.names = FALSE)
+}
+
+print(paste("所有标准化矩阵已保存到文件夹:", output_folder))
+
+
+#####################mantel_test
+install.packages("vegan")
+library(vegan)
+
+gene <- read.csv('H://2025//ME//new1//gene.csv', header = TRUE, row.names = 1, check.names = FALSE)
+IBE_all <- read.csv('H://2025//ME//new1//test/all_IBE.csv', header = TRUE, row.names = 1, check.names = FALSE)
+IBR_all <- read.csv('H://2025//ME//new1//test/all_IBR.csv', header = TRUE, row.names = 1, check.names = FALSE)
+IBD_all <- read.csv('H://2025//ME//new1//test/IBD.csv', header = TRUE, row.names = 1, check.names = FALSE)
+
+sorted_names <- rownames(gene)
+common_names <- intersect(sorted_names, rownames(gene))
+IBD_all <- IBD_all[common_names, common_names]
+IBE_all <- IBE_all[common_names, common_names]
+IBR_all <- IBR_all[common_names, common_names]
+vegan::mantel(gene,IBR_all,permutations = 9999)
+vegan::mantel(gene,IBD_all,permutations = 9999)
+vegan::mantel(gene,IBE_all,permutations = 9999)
+
+vegan::mantel.partial(gene,IBD_all,IBE_all,permutations = 9999)
+vegan::mantel.partial(gene,IBD_all,IBR_all,permutations = 9999)
+
+vegan::mantel.partial(gene,IBE_all,IBD_all,permutations = 9999)
+vegan::mantel.partial(gene,IBE_all,IBR_all,permutations = 9999)
+
+vegan::mantel.partial(gene,IBD_all,IBE_all,permutations = 9999)
+vegan::mantel.partial(gene,IBD_all,IBR_all,permutations = 9999)
+
+
+vegan::mantel(gene,IBR_all,permutations = 9999)
+vegan::mantel(gene,IBD_all,permutations = 9999)
+vegan::mantel(gene,IBE_all,permutations = 9999)
+
+vegan::mantel.partial(gene,IBD_all,IBE_all,permutations = 9999)
+vegan::mantel.partial(gene,IBD_all,IBR_all,permutations = 9999)
+
+vegan::mantel.partial(gene,IBE_all,IBD_all,permutations = 9999)
+vegan::mantel.partial(gene,IBE_all,IBR_all,permutations = 9999)
+
+vegan::mantel.partial(gene,IBD_all,IBE_all,permutations = 9999)
+vegan::mantel.partial(gene,IBD_all,IBR_all,permutations = 9999)
+###################MRM_varpart4_analysis
+install.packages("ecodist")
+install.packages("lavaan")
+install.packages("car")
+library(ecodist)
+library(lavaan)
+library(car)
+E <- c('BGX','XDQ','DG','LH',"NMQ",'JC','MEK','HY','MNG','JZ','RK','HH','JZX','HN','XH','LT')
+N <- c('LX','DY','JEM','HZ','GL','DL','YZ')
+S <- c('JD','GQC','NQ','GLG','LBH','YS','XW','SQ')
+source("H://2025/ME/BioGeoAmazonia-master/BioGeoAmazonia-master/RFunctions.R")
+setwd("H://2025//ME//new1/IBE/pairwise_matrices/")
+IBE_all <- read.csv("all_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBE_aspect <- read.csv("aspect_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBE_bio2 <- read.csv("bio2_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBE_bio9 <- read.csv("bio9_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBE_bio14 <- read.csv("bio14_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBE_ele <- read.csv("elevatio_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBE_river <- read.csv("river_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBE_road <- read.csv("road_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBE_slope <- read.csv("slope_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBE_vegetation <- read.csv("vegetati_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBE_yanjiandi <- read.csv("soil_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+
+
+###E
+IBE_aspect <- IBE_aspect[E,E]
+IBE_bio2 <- IBE_bio2[E,E]
+IBE_bio9 <- IBE_bio9[E,E]
+IBE_bio14 <- IBE_bio14[E,E] 
+IBE_ele <- IBE_ele[E,E]
+IBE_river <- IBE_river[E,E]
+IBE_road <- IBE_road[E,E]
+IBE_slope <- IBE_slope[E,E]
+IBE_vegetation <- IBE_vegetation[E,E]
+IBE_yanjiandi <- IBE_yanjiandi[E,E]
+
+
+###N
+IBE_aspect <- IBE_aspect[N,N]
+IBE_bio2 <- IBE_bio2[N,N]
+IBE_bio9 <- IBE_bio9[N,N]
+IBE_bio14 <- IBE_bio14[N,N] 
+IBE_ele <- IBE_ele[N,N]
+IBE_river <- IBE_river[N,N]
+IBE_road <- IBE_road[N,N]
+IBE_slope <- IBE_slope[N,N]
+IBE_vegetation <- IBE_vegetation[N,N]
+IBE_yanjiandi <- IBE_yanjiandi[N,N]
+###S
+IBE_aspect <- IBE_aspect[S,S]
+IBE_bio2 <- IBE_bio2[S,S]
+IBE_bio9 <- IBE_bio9[S,S]
+IBE_bio14 <- IBE_bio14[S,S] 
+IBE_ele <- IBE_ele[S,S]
+IBE_river <- IBE_river[S,S]
+IBE_road <- IBE_road[S,S]
+IBE_slope <- IBE_slope[S,S]
+IBE_vegetation <- IBE_vegetation[S,S]
+IBE_yanjiandi <- IBE_yanjiandi[S,S]
+
+setwd("H://2025//ME//new1//IBR/")
+IBR_all <-read.csv("all.csv", header = TRUE, row.names = 1, check.names = FALSE)
+#IBR_all <- read.csv("all_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBR_aspect <- read.csv("aspect.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBR_bio2 <- read.csv("bio2.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBR_bio9 <- read.csv("bio9.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBR_bio14 <- read.csv("bio14.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBR_ele <- read.csv("elevation.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBR_river <- read.csv("river.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBR_road <- read.csv("road.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBR_slope <- read.csv("slope.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBR_vegetation <- read.csv("vegatation_type.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBR_yanjiandi <- read.csv("soil.csv", header = TRUE, row.names = 1, check.names = FALSE)
+
+
+###E
+IBR_aspect <- IBR_aspect[E,E]
+IBR_bio2 <- IBR_bio2[E,E]
+IBR_bio9 <- IBR_bio9[E,E]
+IBR_bio14 <- IBR_bio14[E,E] 
+IBR_ele <- IBR_ele[E,E]
+IBR_river <- IBR_river[E,E]
+IBR_road <- IBR_road[E,E]
+IBR_slope <- IBR_slope[E,E]
+IBR_vegetation <- IBR_vegetation[E,E]
+IBR_yanjiandi <- IBR_yanjiandi[E,E]
+##N
+IBR_aspect <- IBR_aspect[N,N]
+IBR_bio2 <- IBR_bio2[N,N]
+IBR_bio9 <- IBR_bio9[N,N]
+IBR_bio14 <- IBR_bio14[N,N] 
+IBR_ele <- IBR_ele[N,N]
+IBR_river <- IBR_river[N,N]
+IBR_road <- IBR_road[N,N]
+IBR_slope <- IBR_slope[N,N]
+IBR_vegetation <- IBR_vegetation[N,N]
+IBR_yanjiandi <- IBR_yanjiandi[N,N]
+###S
+
+IBR_aspect <- IBR_aspect[S,S]
+IBR_bio2 <- IBR_bio2[S,S]
+IBR_bio9 <- IBR_bio9[S,S]
+IBR_bio14 <- IBR_bio14[S,S] 
+IBR_ele <- IBR_ele[S,S]
+IBR_river <- IBR_river[S,S]
+IBR_road <- IBR_road[S,S]
+IBR_slope <- IBR_slope[S,S]
+IBR_vegetation <- IBR_vegetation[S,S]
+IBR_yanjiandi <- IBR_yanjiandi[S,S]
+
+
+
+IBD<-read.csv("H://2025//ME//new1/test/IBD.csv", header = TRUE, row.names = 1, check.names = FALSE)
+
+###E
+IBD <- IBD[E,E]
+###N
+IBD <- IBD[N,N]
+###S
+IBD <- IBD[S,S]
+gen.dist <- read.csv("H://2025//ME//new1/gene.csv", header = TRUE, row.names = 1, check.names = FALSE)
+
+
+###E
+gen.dist <- gen.dist[E,E]
+###N
+gen.dist <- gen.dist[N,N]
+###S
+gen.dist <- gen.dist[S,S]
+
+mantel(gen.dist,IBE_ele)
+
+
+
+sorted_names <- rownames(gen.dist)
+common_names <- intersect(sorted_names, rownames(gen.dist))
+gen.dist <-as.dist(gen.dist)
+
+IBD <- IBD[common_names, common_names]
+#IBD <-stdize(as.dist(IBD))
+IBD <-as.dist(IBD)
+
+IBE_road <- IBE_road[common_names, common_names]
+IBE_road <-as.dist(IBE_road)
+IBE_slope
+IBE_slope <- IBE_slope[common_names, common_names]
+IBE_slope<-as.dist(IBE_slope)
+IBE_vegetation
+IBE_vegetation <- IBE_vegetation[common_names, common_names]
+IBE_vegetation<-as.dist(IBE_vegetation)
+IBE_yanjiandi
+IBE_yanjiandi <- IBE_yanjiandi[common_names, common_names]
+IBE_yanjiandi<-as.dist(IBE_yanjiandi)
+IBE_all_sorted
+IBE_all_sorted <- IBE_all[common_names, common_names]
+IBE_all_sorted <-as.dist(IBE_all_sorted)
+IBE_all_sorted
+IBE_allIBE_aspect<- IBE_aspect[common_names, common_names]
+IBE_aspect <-as.dist(IBE_aspect)
+IBE_bio2 <- IBE_bio2 [common_names, common_names]
+IBE_bio2  <-as.dist(IBE_bio2 )
+IBE_bio9 <- IBE_bio9[common_names, common_names]
+IBE_bio9 <-as.dist(IBE_bio9 )
+
+IBE_bio14 <- IBE_bio14[common_names, common_names]
+IBE_bio14<-as.dist(IBE_bio14)
+IBE_ele 
+IBE_ele  <- IBE_ele [common_names, common_names]
+IBE_ele <-as.dist(IBE_ele)
+IBE_river
+IBE_river <- IBE_river [common_names, common_names]
+IBE_river <-as.dist(IBE_river )
+###IBR
+IBR_all_sorted <- IBR_all[common_names, common_names]
+IBR_all_sorted <- as.dist(IBR_all_sorted)
+IBR_all_sorted
+IBR_road
+IBR_road <- IBR_road[common_names, common_names]
+IBR_road <-as.dist(IBR_road)
+IBR_slope
+IBR_slope <- IBR_slope[common_names, common_names]
+IBR_slope<-as.dist(IBR_slope)
+IBR_vegetation
+IBR_vegetation <- IBR_vegetation[common_names, common_names]
+IBR_vegetation<-as.dist(IBR_vegetation)
+IBR_yanjiandi
+IBR_yanjiandi <- IBR_yanjiandi[common_names, common_names]
+IBR_yanjiandi<-as.dist(IBR_yanjiandi)
+
+IBR_all_sorted <- IBR_all[common_names, common_names]
+IBR_all_sorted <-as.dist(IBR_all_sorted)
+IBR_aspect<- IBR_aspect[common_names, common_names]
+IBR_aspect <-as.dist(IBR_aspect)
+IBR_bio2 <- IBR_bio2 [common_names, common_names]
+IBR_bio2  <-as.dist(IBR_bio2 )
+IBR_bio9 <- IBR_bio9[common_names, common_names]
+IBR_bio9 <-as.dist(IBR_bio9 )
+a <- data.frame(IBR_river)
+IBR_bio14 <- IBR_bio14[common_names, common_names]
+IBR_bio14<-as.dist(IBR_bio14)
+IBR_ele 
+IBR_ele  <- IBR_ele [common_names, common_names]
+IBR_ele <-as.dist(IBR_ele )
+IBR_river
+IBR_river <- IBR_river [common_names, common_names]
+IBR_river <-as.dist(IBR_river )
+IBR_ele 
+
+##all
+model <- lm(gen.dist~IBD+IBR_bio14+IBR_bio2+IBR_yanjiandi+IBR_road
+            +IBE_river+IBE_ele+IBE_bio14+IBE_bio9+IBE_bio2+IBE_aspect+IBE_yanjiandi
+            +IBE_vegetation+IBE_slope+IBE_road)
+
+MRM(gen.dist~IBD+IBR_bio14+IBR_bio2+IBR_yanjiandi
+    +IBR_road+IBE_river+IBE_ele+IBE_bio14+IBE_bio9++IBE_bio2+IBE_aspect+IBE_yanjiandi
+    +IBE_vegetation+IBE_slope+IBE_road,nperm=99999,mrank=TRUE)
+
+r2part <- varpart4(
+  gen.dist,
+  list(IBD),
+  list(IBE_river, IBE_ele, IBE_bio14, IBE_bio9, IBE_bio2, IBE_aspect, IBE_yanjiandi, IBE_vegetation, IBE_slope, IBE_road),
+  list(IBR_bio14,IBR_yanjiandi,IBR_road,IBR_bio2)
+)
+
+r2part
+png("H://2025//ME//new1/MRM_ALL.png", width=4000, height=3000, res=300)  # 高分辨率
+plot(r2part, bg = c('#FF99CC', '#CCFFE5', '#99CCFF'), cex= 2,cex.lab = 2,cex.main = 2, cex.axis = 2,Xnames = c('IBD','IBE','IBR'), cutoff = -1, digits = 1,family='serif')
+dev.off()
+
+##E
+model <- lm(gen.dist~IBD+IBR_bio2+IBR_river+IBR_slope+IBR_yanjiandi
+              +IBR_road+IBR_bio14+IBE_river+IBE_ele+IBE_bio14+IBE_bio2+IBE_slope+IBE_saline_alk+IBE_road)
+
+MRM(gen.dist~IBD+IBR_bio2+IBR_river+IBR_slope+IBR_yanjiandi
+              +IBR_road+IBR_bio14+IBE_river+IBE_ele+IBE_bio14+IBE_bio2+IBE_slope+IBE_saline_alk+IBE_road,nperm=99999,mrank=TRUE)
+
+r2part <- varpart4(
+  gen.dist,
+  list(IBD),
+  list(IBE_river,IBE_ele,IBE_bio14,IBE_bio2,IBE_slope,IBE_saline_alk,IBE_road),
+  list(IBR_bio2,IBR_river,IBR_slope,IBR_yanjiandi,IBR_road)
+)
+
+r2part
+png("H://2025//ME//new1/MRM_E.png", width=4000, height=3000, res=300)  # 高分辨率
+plot(r2part, bg = c('#FF99CC', '#CCFFE5', '#99CCFF'), cex= 2,cex.lab = 2,cex.main = 2, cex.axis = 2,Xnames = c('IBD','IBE','IBR'), cutoff = -1, digits = 1,family='serif')
+dev.off()
+
+
+
+##N
+model <- lm(gen.dist~IBD+IBR_slope
+            +IBR_river+IBE_bio14)
+
+r2part <- varpart4(
+  gen.dist,
+  list(IBD),
+  list(IBE_bio14),
+  list(IBR_river,IBR_slope)
+)
+
+MRM(gen.dist~gen.dist~IBD+IBR_slope
+            +IBR_river+IBE_bio14,nperm=99999,mrank=TRUE)
+
+r2part
+png("H://2025//ME//new1/MRM_N.png", width=4000, height=3000, res=300)  # 高分辨率
+plot(r2part, bg = c('#FF99CC', '#CCFFE5', '#99CCFF'), cex= 2,cex.lab = 2,cex.main = 2, cex.axis = 2,Xnames = c('IBD','IBE','IBR'), cutoff = -1, digits = 1,family='serif')
+dev.off()
+
+##S
+model <- lm(gen.dist~IBD + IBR_river +IBR_road + IBE_bio2 + IBE_bio14+ + IBE_aspect)
+
+
+MRM(gen.dist~IBD + IBR_river +IBR_road + IBE_bio2 + IBE_bio14+ + IBE_aspect,nperm=99999,mrank=TRUE)
+
+r2part <- varpart4(
+  gen.dist,
+  list(IBD),
+  list(IBE_bio2,IBE_bio14, IBE_aspect),
+  list(IBR_road,IBR_river)
+)
+
+r2part
+png("H://2025//ME//new1/MRM_S.png", width=4000, height=3000, res=300)  # 高分辨率
+plot(r2part, bg = c('#FF99CC', '#CCFFE5', '#99CCFF'), cex= 2,cex.lab = 2,cex.main = 2, cex.axis = 2,Xnames = c('IBD','IBE','IBR'), cutoff = -1, digits = 1,family='serif')
+dev.off()
