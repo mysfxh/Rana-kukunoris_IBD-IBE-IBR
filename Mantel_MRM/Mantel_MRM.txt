@@ -24,8 +24,10 @@ write.csv(distance_df, "H://2025//ME//distance_matrixnew.csv", row.names = TRUE)
 ##########IBE_rawdata_cal
 install.packages("writexl")
 install.packages("readxl")
+install.packages("car")
 library(readxl)
 library(writexl)
+library(car)
 
 # 读取Excel文件
 setwd("H://2025//ME//new1//IBE//")
@@ -321,6 +323,7 @@ IBR_ele
 model <- lm(gen.dist~IBD+IBR_bio14+IBR_bio2+IBR_yanjiandi+IBR_road
             +IBE_river+IBE_ele+IBE_bio14+IBE_bio9+IBE_bio2+IBE_aspect+IBE_yanjiandi
             +IBE_vegetation+IBE_slope+IBE_road)
+vif(model) 
 
 MRM(gen.dist~IBD+IBR_bio14+IBR_bio2+IBR_yanjiandi
     +IBR_road+IBE_river+IBE_ele+IBE_bio14+IBE_bio9++IBE_bio2+IBE_aspect+IBE_yanjiandi
@@ -341,7 +344,7 @@ dev.off()
 ##E
 model <- lm(gen.dist~IBD+IBR_bio2+IBR_river+IBR_slope+IBR_yanjiandi
               +IBR_road+IBR_bio14+IBE_river+IBE_ele+IBE_bio14+IBE_bio2+IBE_slope+IBE_saline_alk+IBE_road)
-
+vif(model)
 MRM(gen.dist~IBD+IBR_bio2+IBR_river+IBR_slope+IBR_yanjiandi
               +IBR_road+IBR_bio14+IBE_river+IBE_ele+IBE_bio14+IBE_bio2+IBE_slope+IBE_saline_alk+IBE_road,nperm=99999,mrank=TRUE)
 
@@ -362,7 +365,7 @@ dev.off()
 ##N
 model <- lm(gen.dist~IBD+IBR_slope
             +IBR_river+IBE_bio14)
-
+vif(model)
 r2part <- varpart4(
   gen.dist,
   list(IBD),
@@ -381,7 +384,7 @@ dev.off()
 ##S
 model <- lm(gen.dist~IBD + IBR_river +IBR_road + IBE_bio2 + IBE_bio14+ + IBE_aspect)
 
-
+vif(model)
 MRM(gen.dist~IBD + IBR_river +IBR_road + IBE_bio2 + IBE_bio14+ + IBE_aspect,nperm=99999,mrank=TRUE)
 
 r2part <- varpart4(
