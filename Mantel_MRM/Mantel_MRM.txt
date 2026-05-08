@@ -20,7 +20,6 @@ colnames(distance_df) <- row_col_names
 write.csv(distance_df, "H://2025//ME//distance_matrixnew.csv", row.names = TRUE)
 
 
-
 ##########IBE_rawdata_cal
 install.packages("writexl")
 install.packages("readxl")
