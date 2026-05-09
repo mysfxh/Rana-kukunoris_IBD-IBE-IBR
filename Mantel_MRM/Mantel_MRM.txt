@@ -1,178 +1,216 @@
-##########IBD_rawdata_cal
-# 安装并加载必要的包
+############################################################
+# IBD, IBE, IBR, Mantel test, MRM, and variance partitioning
+# Simple revised version based on the original script
+############################################################
+
+
+############################################################
+# 1. Calculate geographic distance matrix for IBD
+############################################################
+
+# Install and load the required package
 install.packages("geosphere")
 library(geosphere)
-# 读取CSV文件
+
+# Read the coordinate file
+# The file should contain at least three columns: Name, Longitude, and Latitude
 data <- read.csv("H://2025//ME//GYLW.csv")
-# 提取经纬度坐标
+
+# Extract longitude and latitude
 coordinates <- data[, c("Longitude", "Latitude")]
-coordinates
-data$Name
-# 计算距离矩阵
-distance_matrix <- as.matrix(distm(coordinates)/1000)
-distance_matrix
-row_col_names <- if (is.factor(data$Name)) levels(data$Name)[data$Name] else as.character(data$Name)
-# 创建一个数据框，设置行名和列名
+
+# Calculate geographic distance matrix in kilometres
+distance_matrix <- as.matrix(distm(coordinates) / 1000)
+
+# Use population/site names as row and column names
+row_col_names <- as.character(data$Name)
+
 distance_df <- data.frame(distance_matrix)
 rownames(distance_df) <- row_col_names
 colnames(distance_df) <- row_col_names
-# 将距离矩阵写入CSV文件
+
+# Save the geographic distance matrix
 write.csv(distance_df, "H://2025//ME//distance_matrixnew.csv", row.names = TRUE)
 
 
-##########IBE_rawdata_cal
-install.packages("writexl")
+
+############################################################
+# 2. Generate standardized pairwise environmental-distance
+#    matrices for IBE
+############################################################
+
+# Install and load required packages
 install.packages("readxl")
-install.packages("car")
+install.packages("writexl")
+
 library(readxl)
 library(writexl)
-library(car)
 
-# 读取Excel文件
+# Set working directory
 setwd("H://2025//ME//new1//IBE//")
+
+# Read environmental data
+# The first column should be Name, and the remaining columns should be environmental variables
 data <- read_excel("H://2025//ME//new1//IBE//rawdata.xlsx")
 
-# 查看数据
-data
+# Extract site names and environmental-variable names
+names <- as.character(data$Name)
+value_columns <- colnames(data)[-1]
 
-# 提取NAME列和数值列
-names <- data$Name                # 第一列名称
-value_columns <- colnames(data)[-1]  # 除NAME外的数值列
+# Create an output folder for pairwise matrices
+output_folder <- "pairwise_matricesscale"
+dir.create(output_folder, showWarnings = FALSE)
 
-# 创建输出文件夹
-output_folder <- "pairwise_matricesscale" 
-dir.create(output_folder, showWarnings = FALSE)  # 若文件夹不存在则创建
-
-# 循环处理每一列：标准化数据，生成差值矩阵并分别保存
+# For each environmental variable:
+# 1. standardize the variable;
+# 2. calculate pairwise absolute differences;
+# 3. save the matrix as a CSV file.
 for (col in value_columns) {
-  values <- data[[col]]                            # 提取当前列数据
-  
 
-  scaled_values <- as.vector(scale(values))     
-  
-  # 计算pairwise绝对差值矩阵
+  values <- data[[col]]
+
+  # Standardize the variable to mean = 0 and SD = 1
+  scaled_values <- as.vector(scale(values))
+
+  # Calculate pairwise absolute differences
   diff_matrix <- abs(outer(scaled_values, scaled_values, "-"))
-  
-  # 转换为数据框并设置行名和列名
+
+  # Convert the matrix to a data frame
   diff_df <- as.data.frame(diff_matrix)
-  rownames(diff_df) <- names   # 设置行名
-  colnames(diff_df) <- names   # 设置列名
-  
-  # 在首列添加 NAME 列，确保 Excel 文件中也能保留行名
+  rownames(diff_df) <- names
+  colnames(diff_df) <- names
+
+  # Add site names as the first column
   diff_df <- cbind("NAME" = names, diff_df)
-  
-  # 保存为单独的Excel文件，每列生成一个文件
+
+  # Save the pairwise matrix
   output_file <- file.path(output_folder, paste0(col, "_pairwise_scaled.csv"))
   write.csv(diff_df, file = output_file, row.names = FALSE)
 }
 
-print(paste("所有标准化矩阵已保存到文件夹:", output_folder))
+print(paste("All standardized pairwise matrices were saved to:", output_folder))
 
 
-#####################mantel_test
+
+############################################################
+# 3. Mantel and partial Mantel tests
+############################################################
+
+# Install and load the required package
 install.packages("vegan")
 library(vegan)
 
-gene <- read.csv('H://2025//ME//new1//gene.csv', header = TRUE, row.names = 1, check.names = FALSE)
-IBE_all <- read.csv('H://2025//ME//new1//test/all_IBE.csv', header = TRUE, row.names = 1, check.names = FALSE)
-IBR_all <- read.csv('H://2025//ME//new1//test/all_IBR.csv', header = TRUE, row.names = 1, check.names = FALSE)
-IBD_all <- read.csv('H://2025//ME//new1//test/IBD.csv', header = TRUE, row.names = 1, check.names = FALSE)
+# Read genetic, IBE, IBR, and IBD distance matrices
+gene <- read.csv("H://2025//ME//new1//gene.csv",
+                 header = TRUE, row.names = 1, check.names = FALSE)
 
-sorted_names <- rownames(gene)
-common_names <- intersect(sorted_names, rownames(gene))
-IBD_all <- IBD_all[common_names, common_names]
+IBE_all <- read.csv("H://2025//ME//new1//test/all_IBE.csv",
+                    header = TRUE, row.names = 1, check.names = FALSE)
+
+IBR_all <- read.csv("H://2025//ME//new1//test/all_IBR.csv",
+                    header = TRUE, row.names = 1, check.names = FALSE)
+
+IBD_all <- read.csv("H://2025//ME//new1//test/IBD.csv",
+                    header = TRUE, row.names = 1, check.names = FALSE)
+
+# Keep only the sites shared by all matrices and use the same order
+common_names <- Reduce(intersect, list(
+  rownames(gene),
+  rownames(IBE_all),
+  rownames(IBR_all),
+  rownames(IBD_all)
+))
+
+gene <- gene[common_names, common_names]
 IBE_all <- IBE_all[common_names, common_names]
 IBR_all <- IBR_all[common_names, common_names]
-vegan::mantel(gene,IBR_all,permutations = 9999)
-vegan::mantel(gene,IBD_all,permutations = 9999)
-vegan::mantel(gene,IBE_all,permutations = 9999)
+IBD_all <- IBD_all[common_names, common_names]
 
-vegan::mantel.partial(gene,IBD_all,IBE_all,permutations = 9999)
-vegan::mantel.partial(gene,IBD_all,IBR_all,permutations = 9999)
+# Convert matrices to distance objects
+gene_dist <- as.dist(gene)
+IBE_dist <- as.dist(IBE_all)
+IBR_dist <- as.dist(IBR_all)
+IBD_dist <- as.dist(IBD_all)
 
-vegan::mantel.partial(gene,IBE_all,IBD_all,permutations = 9999)
-vegan::mantel.partial(gene,IBE_all,IBR_all,permutations = 9999)
+# Simple Mantel tests
+mantel_IBR <- vegan::mantel(gene_dist, IBR_dist, permutations = 9999)
+mantel_IBD <- vegan::mantel(gene_dist, IBD_dist, permutations = 9999)
+mantel_IBE <- vegan::mantel(gene_dist, IBE_dist, permutations = 9999)
 
-vegan::mantel.partial(gene,IBD_all,IBE_all,permutations = 9999)
-vegan::mantel.partial(gene,IBD_all,IBR_all,permutations = 9999)
+mantel_IBR
+mantel_IBD
+mantel_IBE
+
+# Partial Mantel tests
+# Test IBD while controlling for IBE or IBR
+partial_IBD_IBE <- vegan::mantel.partial(gene_dist, IBD_dist, IBE_dist, permutations = 9999)
+partial_IBD_IBR <- vegan::mantel.partial(gene_dist, IBD_dist, IBR_dist, permutations = 9999)
+
+# Test IBE while controlling for IBD or IBR
+partial_IBE_IBD <- vegan::mantel.partial(gene_dist, IBE_dist, IBD_dist, permutations = 9999)
+partial_IBE_IBR <- vegan::mantel.partial(gene_dist, IBE_dist, IBR_dist, permutations = 9999)
+
+# Test IBR while controlling for IBD or IBE
+partial_IBR_IBD <- vegan::mantel.partial(gene_dist, IBR_dist, IBD_dist, permutations = 9999)
+partial_IBR_IBE <- vegan::mantel.partial(gene_dist, IBR_dist, IBE_dist, permutations = 9999)
+
+partial_IBD_IBE
+partial_IBD_IBR
+partial_IBE_IBD
+partial_IBE_IBR
+partial_IBR_IBD
+partial_IBR_IBE
 
 
-vegan::mantel(gene,IBR_all,permutations = 9999)
-vegan::mantel(gene,IBD_all,permutations = 9999)
-vegan::mantel(gene,IBE_all,permutations = 9999)
 
-vegan::mantel.partial(gene,IBD_all,IBE_all,permutations = 9999)
-vegan::mantel.partial(gene,IBD_all,IBR_all,permutations = 9999)
+############################################################
+# 4. MRM and variance partitioning
+############################################################
 
-vegan::mantel.partial(gene,IBE_all,IBD_all,permutations = 9999)
-vegan::mantel.partial(gene,IBE_all,IBR_all,permutations = 9999)
-
-vegan::mantel.partial(gene,IBD_all,IBE_all,permutations = 9999)
-vegan::mantel.partial(gene,IBD_all,IBR_all,permutations = 9999)
-###################MRM_varpart4_analysis
+# Install and load required packages
 install.packages("ecodist")
-install.packages("lavaan")
 install.packages("car")
+
 library(ecodist)
-library(lavaan)
 library(car)
-E <- c('BGX','XDQ','DG','LH',"NMQ",'JC','MEK','HY','MNG','JZ','RK','HH','JZX','HN','XH','LT')
-N <- c('LX','DY','JEM','HZ','GL','DL','YZ')
-S <- c('JD','GQC','NQ','GLG','LBH','YS','XW','SQ')
+
+# Load the custom function for variance partitioning
+# Please check that this file path is correct
 source("H://2025/ME/BioGeoAmazonia-master/BioGeoAmazonia-master/RFunctions.R")
-setwd("H://2025//ME//new1/IBE/pairwise_matrices/")
-IBE_all <- read.csv("all_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+
+# Define three geographic groups
+E <- c("BGX", "XDQ", "DG", "LH", "NMQ", "JC", "MEK", "HY",
+       "MNG", "JZ", "RK", "HH", "JZX", "HN", "XH", "LT")
+
+N <- c("LX", "DY", "JEM", "HZ", "GL", "DL", "YZ")
+
+S <- c("JD", "GQC", "NQ", "GLG", "LBH", "YS", "XW", "SQ")
+
+
+############################################################
+# 4.1 Read IBE matrices
+############################################################
+
+setwd("H://2025//ME//new1//IBE//pairwise_matrices//")
+
 IBE_aspect <- read.csv("aspect_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
 IBE_bio2 <- read.csv("bio2_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
 IBE_bio9 <- read.csv("bio9_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
 IBE_bio14 <- read.csv("bio14_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
-IBE_ele <- read.csv("elevatio_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBE_ele <- read.csv("elevation_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
 IBE_river <- read.csv("river_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
 IBE_road <- read.csv("road_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
 IBE_slope <- read.csv("slope_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
-IBE_vegetation <- read.csv("vegetati_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
-IBE_yanjiandi <- read.csv("soil_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBE_vegetation <- read.csv("vegetation_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBE_saline_alk <- read.csv("soil_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
 
 
-###E
-IBE_aspect <- IBE_aspect[E,E]
-IBE_bio2 <- IBE_bio2[E,E]
-IBE_bio9 <- IBE_bio9[E,E]
-IBE_bio14 <- IBE_bio14[E,E] 
-IBE_ele <- IBE_ele[E,E]
-IBE_river <- IBE_river[E,E]
-IBE_road <- IBE_road[E,E]
-IBE_slope <- IBE_slope[E,E]
-IBE_vegetation <- IBE_vegetation[E,E]
-IBE_yanjiandi <- IBE_yanjiandi[E,E]
+############################################################
+# 4.2 Read IBR matrices
+############################################################
 
+setwd("H://2025//ME//new1//IBR//")
 
-###N
-IBE_aspect <- IBE_aspect[N,N]
-IBE_bio2 <- IBE_bio2[N,N]
-IBE_bio9 <- IBE_bio9[N,N]
-IBE_bio14 <- IBE_bio14[N,N] 
-IBE_ele <- IBE_ele[N,N]
-IBE_river <- IBE_river[N,N]
-IBE_road <- IBE_road[N,N]
-IBE_slope <- IBE_slope[N,N]
-IBE_vegetation <- IBE_vegetation[N,N]
-IBE_yanjiandi <- IBE_yanjiandi[N,N]
-###S
-IBE_aspect <- IBE_aspect[S,S]
-IBE_bio2 <- IBE_bio2[S,S]
-IBE_bio9 <- IBE_bio9[S,S]
-IBE_bio14 <- IBE_bio14[S,S] 
-IBE_ele <- IBE_ele[S,S]
-IBE_river <- IBE_river[S,S]
-IBE_road <- IBE_road[S,S]
-IBE_slope <- IBE_slope[S,S]
-IBE_vegetation <- IBE_vegetation[S,S]
-IBE_yanjiandi <- IBE_yanjiandi[S,S]
-
-setwd("H://2025//ME//new1//IBR/")
-IBR_all <-read.csv("all.csv", header = TRUE, row.names = 1, check.names = FALSE)
-#IBR_all <- read.csv("all_pairwise.csv", header = TRUE, row.names = 1, check.names = FALSE)
 IBR_aspect <- read.csv("aspect.csv", header = TRUE, row.names = 1, check.names = FALSE)
 IBR_bio2 <- read.csv("bio2.csv", header = TRUE, row.names = 1, check.names = FALSE)
 IBR_bio9 <- read.csv("bio9.csv", header = TRUE, row.names = 1, check.names = FALSE)
@@ -181,219 +219,302 @@ IBR_ele <- read.csv("elevation.csv", header = TRUE, row.names = 1, check.names =
 IBR_river <- read.csv("river.csv", header = TRUE, row.names = 1, check.names = FALSE)
 IBR_road <- read.csv("road.csv", header = TRUE, row.names = 1, check.names = FALSE)
 IBR_slope <- read.csv("slope.csv", header = TRUE, row.names = 1, check.names = FALSE)
-IBR_vegetation <- read.csv("vegatation_type.csv", header = TRUE, row.names = 1, check.names = FALSE)
-IBR_yanjiandi <- read.csv("soil.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBR_vegetation <- read.csv("vegetation_type.csv", header = TRUE, row.names = 1, check.names = FALSE)
+IBR_saline_alk <- read.csv("soil.csv", header = TRUE, row.names = 1, check.names = FALSE)
 
 
-###E
-IBR_aspect <- IBR_aspect[E,E]
-IBR_bio2 <- IBR_bio2[E,E]
-IBR_bio9 <- IBR_bio9[E,E]
-IBR_bio14 <- IBR_bio14[E,E] 
-IBR_ele <- IBR_ele[E,E]
-IBR_river <- IBR_river[E,E]
-IBR_road <- IBR_road[E,E]
-IBR_slope <- IBR_slope[E,E]
-IBR_vegetation <- IBR_vegetation[E,E]
-IBR_yanjiandi <- IBR_yanjiandi[E,E]
-##N
-IBR_aspect <- IBR_aspect[N,N]
-IBR_bio2 <- IBR_bio2[N,N]
-IBR_bio9 <- IBR_bio9[N,N]
-IBR_bio14 <- IBR_bio14[N,N] 
-IBR_ele <- IBR_ele[N,N]
-IBR_river <- IBR_river[N,N]
-IBR_road <- IBR_road[N,N]
-IBR_slope <- IBR_slope[N,N]
-IBR_vegetation <- IBR_vegetation[N,N]
-IBR_yanjiandi <- IBR_yanjiandi[N,N]
-###S
+############################################################
+# 4.3 Read IBD and genetic distance matrices
+############################################################
 
-IBR_aspect <- IBR_aspect[S,S]
-IBR_bio2 <- IBR_bio2[S,S]
-IBR_bio9 <- IBR_bio9[S,S]
-IBR_bio14 <- IBR_bio14[S,S] 
-IBR_ele <- IBR_ele[S,S]
-IBR_river <- IBR_river[S,S]
-IBR_road <- IBR_road[S,S]
-IBR_slope <- IBR_slope[S,S]
-IBR_vegetation <- IBR_vegetation[S,S]
-IBR_yanjiandi <- IBR_yanjiandi[S,S]
+IBD <- read.csv("H://2025//ME//new1//test//IBD.csv",
+                header = TRUE, row.names = 1, check.names = FALSE)
+
+gen.dist <- read.csv("H://2025//ME//new1//gene.csv",
+                     header = TRUE, row.names = 1, check.names = FALSE)
 
 
 
-IBD<-read.csv("H://2025//ME//new1/test/IBD.csv", header = TRUE, row.names = 1, check.names = FALSE)
+############################################################
+# 5. Select one dataset for MRM
+############################################################
 
-###E
-IBD <- IBD[E,E]
-###N
-IBD <- IBD[N,N]
-###S
-IBD <- IBD[S,S]
-gen.dist <- read.csv("H://2025//ME//new1/gene.csv", header = TRUE, row.names = 1, check.names = FALSE)
+# Choose one of the following:
+# group <- "ALL"
+# group <- "E"
+# group <- "N"
+# group <- "S"
+
+group <- "ALL"
+
+if (group == "ALL") {
+  sites <- rownames(gen.dist)
+}
+
+if (group == "E") {
+  sites <- E
+}
+
+if (group == "N") {
+  sites <- N
+}
+
+if (group == "S") {
+  sites <- S
+}
+
+# Keep only sites that are present in the genetic-distance matrix
+sites <- intersect(sites, rownames(gen.dist))
 
 
-###E
-gen.dist <- gen.dist[E,E]
-###N
-gen.dist <- gen.dist[N,N]
-###S
-gen.dist <- gen.dist[S,S]
+############################################################
+# 6. Subset all matrices using the selected sites
+############################################################
 
-mantel(gen.dist,IBE_ele)
+gen.dist <- gen.dist[sites, sites]
+IBD <- IBD[sites, sites]
+
+IBE_aspect <- IBE_aspect[sites, sites]
+IBE_bio2 <- IBE_bio2[sites, sites]
+IBE_bio9 <- IBE_bio9[sites, sites]
+IBE_bio14 <- IBE_bio14[sites, sites]
+IBE_ele <- IBE_ele[sites, sites]
+IBE_river <- IBE_river[sites, sites]
+IBE_road <- IBE_road[sites, sites]
+IBE_slope <- IBE_slope[sites, sites]
+IBE_vegetation <- IBE_vegetation[sites, sites]
+IBE_saline_alk <- IBE_saline_alk[sites, sites]
+
+IBR_aspect <- IBR_aspect[sites, sites]
+IBR_bio2 <- IBR_bio2[sites, sites]
+IBR_bio9 <- IBR_bio9[sites, sites]
+IBR_bio14 <- IBR_bio14[sites, sites]
+IBR_ele <- IBR_ele[sites, sites]
+IBR_river <- IBR_river[sites, sites]
+IBR_road <- IBR_road[sites, sites]
+IBR_slope <- IBR_slope[sites, sites]
+IBR_vegetation <- IBR_vegetation[sites, sites]
+IBR_saline_alk <- IBR_saline_alk[sites, sites]
+
+
+############################################################
+# 7. Convert matrices to distance objects
+############################################################
+
+gen.dist <- as.dist(gen.dist)
+IBD <- as.dist(IBD)
+
+IBE_aspect <- as.dist(IBE_aspect)
+IBE_bio2 <- as.dist(IBE_bio2)
+IBE_bio9 <- as.dist(IBE_bio9)
+IBE_bio14 <- as.dist(IBE_bio14)
+IBE_ele <- as.dist(IBE_ele)
+IBE_river <- as.dist(IBE_river)
+IBE_road <- as.dist(IBE_road)
+IBE_slope <- as.dist(IBE_slope)
+IBE_vegetation <- as.dist(IBE_vegetation)
+IBE_saline_alk <- as.dist(IBE_saline_alk)
+
+IBR_aspect <- as.dist(IBR_aspect)
+IBR_bio2 <- as.dist(IBR_bio2)
+IBR_bio9 <- as.dist(IBR_bio9)
+IBR_bio14 <- as.dist(IBR_bio14)
+IBR_ele <- as.dist(IBR_ele)
+IBR_river <- as.dist(IBR_river)
+IBR_road <- as.dist(IBR_road)
+IBR_slope <- as.dist(IBR_slope)
+IBR_vegetation <- as.dist(IBR_vegetation)
+IBR_saline_alk <- as.dist(IBR_saline_alk)
 
 
 
-sorted_names <- rownames(gen.dist)
-common_names <- intersect(sorted_names, rownames(gen.dist))
-gen.dist <-as.dist(gen.dist)
+############################################################
+# 8. MRM and variance partitioning for all sites
+############################################################
 
-IBD <- IBD[common_names, common_names]
-#IBD <-stdize(as.dist(IBD))
-IBD <-as.dist(IBD)
+# Check multicollinearity using VIF
+model_all <- lm(gen.dist ~ IBD +
+                  IBR_bio14 + IBR_bio2 + IBR_saline_alk + IBR_road +
+                  IBE_river + IBE_ele + IBE_bio14 + IBE_bio9 + IBE_bio2 +
+                  IBE_aspect + IBE_saline_alk + IBE_vegetation +
+                  IBE_slope + IBE_road)
 
-IBE_road <- IBE_road[common_names, common_names]
-IBE_road <-as.dist(IBE_road)
-IBE_slope
-IBE_slope <- IBE_slope[common_names, common_names]
-IBE_slope<-as.dist(IBE_slope)
-IBE_vegetation
-IBE_vegetation <- IBE_vegetation[common_names, common_names]
-IBE_vegetation<-as.dist(IBE_vegetation)
-IBE_yanjiandi
-IBE_yanjiandi <- IBE_yanjiandi[common_names, common_names]
-IBE_yanjiandi<-as.dist(IBE_yanjiandi)
-IBE_all_sorted
-IBE_all_sorted <- IBE_all[common_names, common_names]
-IBE_all_sorted <-as.dist(IBE_all_sorted)
-IBE_all_sorted
-IBE_allIBE_aspect<- IBE_aspect[common_names, common_names]
-IBE_aspect <-as.dist(IBE_aspect)
-IBE_bio2 <- IBE_bio2 [common_names, common_names]
-IBE_bio2  <-as.dist(IBE_bio2 )
-IBE_bio9 <- IBE_bio9[common_names, common_names]
-IBE_bio9 <-as.dist(IBE_bio9 )
+vif(model_all)
 
-IBE_bio14 <- IBE_bio14[common_names, common_names]
-IBE_bio14<-as.dist(IBE_bio14)
-IBE_ele 
-IBE_ele  <- IBE_ele [common_names, common_names]
-IBE_ele <-as.dist(IBE_ele)
-IBE_river
-IBE_river <- IBE_river [common_names, common_names]
-IBE_river <-as.dist(IBE_river )
-###IBR
-IBR_all_sorted <- IBR_all[common_names, common_names]
-IBR_all_sorted <- as.dist(IBR_all_sorted)
-IBR_all_sorted
-IBR_road
-IBR_road <- IBR_road[common_names, common_names]
-IBR_road <-as.dist(IBR_road)
-IBR_slope
-IBR_slope <- IBR_slope[common_names, common_names]
-IBR_slope<-as.dist(IBR_slope)
-IBR_vegetation
-IBR_vegetation <- IBR_vegetation[common_names, common_names]
-IBR_vegetation<-as.dist(IBR_vegetation)
-IBR_yanjiandi
-IBR_yanjiandi <- IBR_yanjiandi[common_names, common_names]
-IBR_yanjiandi<-as.dist(IBR_yanjiandi)
+# Run MRM
+MRM_all <- MRM(gen.dist ~ IBD +
+                 IBR_bio14 + IBR_bio2 + IBR_saline_alk + IBR_road +
+                 IBE_river + IBE_ele + IBE_bio14 + IBE_bio9 + IBE_bio2 +
+                 IBE_aspect + IBE_saline_alk + IBE_vegetation +
+                 IBE_slope + IBE_road,
+               nperm = 99999,
+               mrank = TRUE)
 
-IBR_all_sorted <- IBR_all[common_names, common_names]
-IBR_all_sorted <-as.dist(IBR_all_sorted)
-IBR_aspect<- IBR_aspect[common_names, common_names]
-IBR_aspect <-as.dist(IBR_aspect)
-IBR_bio2 <- IBR_bio2 [common_names, common_names]
-IBR_bio2  <-as.dist(IBR_bio2 )
-IBR_bio9 <- IBR_bio9[common_names, common_names]
-IBR_bio9 <-as.dist(IBR_bio9 )
-a <- data.frame(IBR_river)
-IBR_bio14 <- IBR_bio14[common_names, common_names]
-IBR_bio14<-as.dist(IBR_bio14)
-IBR_ele 
-IBR_ele  <- IBR_ele [common_names, common_names]
-IBR_ele <-as.dist(IBR_ele )
-IBR_river
-IBR_river <- IBR_river [common_names, common_names]
-IBR_river <-as.dist(IBR_river )
-IBR_ele 
+MRM_all
 
-##all
-model <- lm(gen.dist~IBD+IBR_bio14+IBR_bio2+IBR_yanjiandi+IBR_road
-            +IBE_river+IBE_ele+IBE_bio14+IBE_bio9+IBE_bio2+IBE_aspect+IBE_yanjiandi
-            +IBE_vegetation+IBE_slope+IBE_road)
-vif(model) 
-
-MRM(gen.dist~IBD+IBR_bio14+IBR_bio2+IBR_yanjiandi
-    +IBR_road+IBE_river+IBE_ele+IBE_bio14+IBE_bio9++IBE_bio2+IBE_aspect+IBE_yanjiandi
-    +IBE_vegetation+IBE_slope+IBE_road,nperm=99999,mrank=TRUE)
-
-r2part <- varpart4(
+# Variance partitioning among IBD, IBE, and IBR
+r2part_all <- varpart4(
   gen.dist,
   list(IBD),
-  list(IBE_river, IBE_ele, IBE_bio14, IBE_bio9, IBE_bio2, IBE_aspect, IBE_yanjiandi, IBE_vegetation, IBE_slope, IBE_road),
-  list(IBR_bio14,IBR_yanjiandi,IBR_road,IBR_bio2)
+  list(IBE_river, IBE_ele, IBE_bio14, IBE_bio9, IBE_bio2,
+       IBE_aspect, IBE_saline_alk, IBE_vegetation, IBE_slope, IBE_road),
+  list(IBR_bio14, IBR_saline_alk, IBR_road, IBR_bio2)
 )
 
-r2part
-png("H://2025//ME//new1/MRM_ALL.png", width=4000, height=3000, res=300)  # 高分辨率
-plot(r2part, bg = c('#FF99CC', '#CCFFE5', '#99CCFF'), cex= 2,cex.lab = 2,cex.main = 2, cex.axis = 2,Xnames = c('IBD','IBE','IBR'), cutoff = -1, digits = 1,family='serif')
-dev.off()
+r2part_all
 
-##E
-model <- lm(gen.dist~IBD+IBR_bio2+IBR_river+IBR_slope+IBR_yanjiandi
-              +IBR_road+IBR_bio14+IBE_river+IBE_ele+IBE_bio14+IBE_bio2+IBE_slope+IBE_saline_alk+IBE_road)
-vif(model)
-MRM(gen.dist~IBD+IBR_bio2+IBR_river+IBR_slope+IBR_yanjiandi
-              +IBR_road+IBR_bio14+IBE_river+IBE_ele+IBE_bio14+IBE_bio2+IBE_slope+IBE_saline_alk+IBE_road,nperm=99999,mrank=TRUE)
+# Save the variance-partitioning plot
+png("H://2025//ME//new1//MRM_ALL.png", width = 4000, height = 3000, res = 300)
 
-r2part <- varpart4(
-  gen.dist,
-  list(IBD),
-  list(IBE_river,IBE_ele,IBE_bio14,IBE_bio2,IBE_slope,IBE_saline_alk,IBE_road),
-  list(IBR_bio2,IBR_river,IBR_slope,IBR_yanjiandi,IBR_road)
-)
+plot(r2part_all,
+     bg = c("#FF99CC", "#CCFFE5", "#99CCFF"),
+     cex = 2,
+     cex.lab = 2,
+     cex.main = 2,
+     cex.axis = 2,
+     Xnames = c("IBD", "IBE", "IBR"),
+     cutoff = -1,
+     digits = 1,
+     family = "serif")
 
-r2part
-png("H://2025//ME//new1/MRM_E.png", width=4000, height=3000, res=300)  # 高分辨率
-plot(r2part, bg = c('#FF99CC', '#CCFFE5', '#99CCFF'), cex= 2,cex.lab = 2,cex.main = 2, cex.axis = 2,Xnames = c('IBD','IBE','IBR'), cutoff = -1, digits = 1,family='serif')
 dev.off()
 
 
 
-##N
-model <- lm(gen.dist~IBD+IBR_slope
-            +IBR_river+IBE_bio14)
-vif(model)
-r2part <- varpart4(
+############################################################
+# 9. Alternative MRM models for E, N, and S groups
+############################################################
+
+# Important:
+# To run the E, N, or S model, change `group <- "ALL"` above to
+# group <- "E", group <- "N", or group <- "S", and then rerun the script.
+
+
+############################################################
+# 9.1 Model for group E
+############################################################
+
+model_E <- lm(gen.dist ~ IBD +
+                IBR_bio2 + IBR_river + IBR_slope + IBR_saline_alk +
+                IBR_road + IBR_bio14 +
+                IBE_river + IBE_ele + IBE_bio14 + IBE_bio2 +
+                IBE_slope + IBE_saline_alk + IBE_road)
+
+vif(model_E)
+
+MRM_E <- MRM(gen.dist ~ IBD +
+               IBR_bio2 + IBR_river + IBR_slope + IBR_saline_alk +
+               IBR_road + IBR_bio14 +
+               IBE_river + IBE_ele + IBE_bio14 + IBE_bio2 +
+               IBE_slope + IBE_saline_alk + IBE_road,
+             nperm = 99999,
+             mrank = TRUE)
+
+MRM_E
+
+r2part_E <- varpart4(
+  gen.dist,
+  list(IBD),
+  list(IBE_river, IBE_ele, IBE_bio14, IBE_bio2,
+       IBE_slope, IBE_saline_alk, IBE_road),
+  list(IBR_bio2, IBR_river, IBR_slope, IBR_saline_alk, IBR_road)
+)
+
+r2part_E
+
+png("H://2025//ME//new1//MRM_E.png", width = 4000, height = 3000, res = 300)
+
+plot(r2part_E,
+     bg = c("#FF99CC", "#CCFFE5", "#99CCFF"),
+     cex = 2,
+     cex.lab = 2,
+     cex.main = 2,
+     cex.axis = 2,
+     Xnames = c("IBD", "IBE", "IBR"),
+     cutoff = -1,
+     digits = 1,
+     family = "serif")
+
+dev.off()
+
+
+
+############################################################
+# 9.2 Model for group N
+############################################################
+
+model_N <- lm(gen.dist ~ IBD + IBR_slope + IBR_river + IBE_bio14)
+
+vif(model_N)
+
+MRM_N <- MRM(gen.dist ~ IBD + IBR_slope + IBR_river + IBE_bio14,
+             nperm = 99999,
+             mrank = TRUE)
+
+MRM_N
+
+r2part_N <- varpart4(
   gen.dist,
   list(IBD),
   list(IBE_bio14),
-  list(IBR_river,IBR_slope)
+  list(IBR_river, IBR_slope)
 )
 
-MRM(gen.dist~gen.dist~IBD+IBR_slope
-            +IBR_river+IBE_bio14,nperm=99999,mrank=TRUE)
+r2part_N
 
-r2part
-png("H://2025//ME//new1/MRM_N.png", width=4000, height=3000, res=300)  # 高分辨率
-plot(r2part, bg = c('#FF99CC', '#CCFFE5', '#99CCFF'), cex= 2,cex.lab = 2,cex.main = 2, cex.axis = 2,Xnames = c('IBD','IBE','IBR'), cutoff = -1, digits = 1,family='serif')
+png("H://2025//ME//new1//MRM_N.png", width = 4000, height = 3000, res = 300)
+
+plot(r2part_N,
+     bg = c("#FF99CC", "#CCFFE5", "#99CCFF"),
+     cex = 2,
+     cex.lab = 2,
+     cex.main = 2,
+     cex.axis = 2,
+     Xnames = c("IBD", "IBE", "IBR"),
+     cutoff = -1,
+     digits = 1,
+     family = "serif")
+
 dev.off()
 
-##S
-model <- lm(gen.dist~IBD + IBR_river +IBR_road + IBE_bio2 + IBE_bio14+ + IBE_aspect)
 
-vif(model)
-MRM(gen.dist~IBD + IBR_river +IBR_road + IBE_bio2 + IBE_bio14+ + IBE_aspect,nperm=99999,mrank=TRUE)
 
-r2part <- varpart4(
+############################################################
+# 9.3 Model for group S
+############################################################
+
+model_S <- lm(gen.dist ~ IBD + IBR_river + IBR_road +
+                IBE_bio2 + IBE_bio14 + IBE_aspect)
+
+vif(model_S)
+
+MRM_S <- MRM(gen.dist ~ IBD + IBR_river + IBR_road +
+               IBE_bio2 + IBE_bio14 + IBE_aspect,
+             nperm = 99999,
+             mrank = TRUE)
+
+MRM_S
+
+r2part_S <- varpart4(
   gen.dist,
   list(IBD),
-  list(IBE_bio2,IBE_bio14, IBE_aspect),
-  list(IBR_road,IBR_river)
+  list(IBE_bio2, IBE_bio14, IBE_aspect),
+  list(IBR_road, IBR_river)
 )
 
-r2part
-png("H://2025//ME//new1/MRM_S.png", width=4000, height=3000, res=300)  # 高分辨率
-plot(r2part, bg = c('#FF99CC', '#CCFFE5', '#99CCFF'), cex= 2,cex.lab = 2,cex.main = 2, cex.axis = 2,Xnames = c('IBD','IBE','IBR'), cutoff = -1, digits = 1,family='serif')
+r2part_S
+
+png("H://2025//ME//new1//MRM_S.png", width = 4000, height = 3000, res = 300)
+
+plot(r2part_S,
+     bg = c("#FF99CC", "#CCFFE5", "#99CCFF"),
+     cex = 2,
+     cex.lab = 2,
+     cex.main = 2,
+     cex.axis = 2,
+     Xnames = c("IBD", "IBE", "IBR"),
+     cutoff = -1,
+     digits = 1,
+     family = "serif")
+
 dev.off()
