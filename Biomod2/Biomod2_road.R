@@ -1,3 +1,11 @@
+############################################################
+# MaxEnt species distribution modelling using biomod2
+############################################################
+
+
+############################################################
+# 1. Load required packages
+############################################################
 library(terra)
 library(biomod2)
 library(raster)
@@ -6,102 +14,150 @@ library(tidyterra)
 library(ggplot2)
 library(dismo)
 library(doParallel)
-#setwd("D://BaiduSyncdisk//enmevalu7te_for_enmeval_2.0//enmevaluate_for_enmeval_2.0//")
-#setwd("/home/xiongh/Biomod2/")
+
+
+############################################################
+# 2. Read species occurrence data
+############################################################
+
+# Read occurrence records.
+# The CSV file should contain three columns:
+# Species, X, and Y.
+# X = longitude, Y = latitude.
 setwd("/home/xiongh/Biomod2/new/result_1//")
 points <- read.csv(file = "/home/xiongh/Biomod2/new/result_1/enmeval/GYLW_all.csv", header = T);
-points <- cbind(points, rep.int(1, length(nrow(points)))); #ÐÂÉú³ÉÒ»ÁÐ´ú±íµ±Ç°´æÔÚµÄµã
+
+# Add a response column.
+# Here, all records are presence records, so the response value is 1.
+points <- cbind(points, rep.int(1, length(nrow(points)))); 
+
+# Rename columns.
 colnames(points) <- c("Species", "X", "Y", "Response");
 
-# ¼ÙÉèÄãÓÐ»·¾³±äÁ¿Êý¾Ý (Èç BIOCLIM Êý¾Ý)£¬´æ´¢ÔÚ myExpl ÖÐ
+############################################################
+# 3. Read environmental raster layers
+############################################################
 single_envt <- raster("/home/xiongh/Biomod2/new/result_1/env/new_road_ds.asc")
 
-envt.st <- stack(single_envt); # ¶ÁÈ¡Õ¤¸ñÊý¾Ý
+# Read environmental raster layers as a RasterStack.
+envt.st <- stack(single_envt); 
 myRespName <- 'Xionh'
-# ¸ñÊ½»¯Êý¾Ý
 
+print("Environmental layers were loaded successfully.")
 
-print("yes")
+############################################################
+# 4. Format data for biomod2
+############################################################
 
+# Format occurrence and environmental data for biomod2.
+# Presence records are coded as 1.
+# Pseudo-absence points are generated randomly
 myBiomodData <- BIOMOD_FormatingData(
-  resp.var = ifelse(points[, 4] == 1, 1, NA),  # ½«³öÏÖµãµÄÖµÉèÖÃÎª1£¬ÆäËûµãÉèÖÃÎªNA
+  resp.var = ifelse(points[, 4] == 1, 1, NA),
   resp.xy = points[, 2:3],
   resp.name = as.character(points[1, 1]),
   expl.var = envt.st,
-  PA.nb.rep = 10,           # ÉèÖÃÉú³ÉÎ±È±Ê§Êý¾ÝµÄÖØ¸´´ÎÊý
-  PA.nb.absences = 1000,    # ÉèÖÃÃ¿´ÎÑ¡Ôñ1000¸öÎ±È±Ê§Êý¾Ýµã
-  PA.strategy = "random",    # ÉèÖÃÎ±È±Ê§Êý¾ÝµÄÑ¡Ôñ²ßÂÔ£¬Ê¹ÓÃËæ»úÑ¡Ôñ
-  filter.raster = TRUE
-
+  PA.nb.rep = 10,          # Number of pseudo-absence replicates
+  PA.nb.absences = 1000,   # Number of pseudo-absence points per replicate
+  PA.strategy = "random",  # Random pseudo-absence selection
+  filter.raster = TRUE     # Remove duplicated records in the same raster cell
 )
 
 
 
-# ¶¨Òå MAXENT Ä£ÐÍµÄ×Ô¶¨Òå²ÎÊý
-#setwd('D://Maxent//')
+############################################################
+# 5. Set custom MaxEnt parameters
+############################################################
+
+# Set the working directory for model output
 setwd("/home/xiongh/Biomod2/new/result_1/")
 user_maxent <- list(
-  '_allData_allRun' = list(
-    path_to_maxent.jar = './Maxent1',  # MaxEnt JAR ÎÄ¼þÂ·¾¶
-    memory_allocated =1024,                     # ·ÖÅäµÄÄÚ´æ£¨MB£©
-    initial_heap_size = NULL,             # ³õÊ¼¶ÑÄÚ´æ´óÐ¡
-    max_heap_size = NULL,                 # ×î´ó¶ÑÄÚ´æ´óÐ¡
-    background_data_dir = "default",       # ±³¾°Êý¾ÝÄ¿Â¼
-    visible = FALSE,                            # ÊÇ·ñÏÔÊ¾ MaxEnt ½çÃæ
-    linear = TRUE,                              # ÊÇ·ñÊ¹ÓÃÏßÐÔÌØÕ÷
-    quadratic = TRUE,                           # ÊÇ·ñÊ¹ÓÃ¶þ´ÎÌØÕ÷
-    product = FALSE,                             # ÊÇ·ñÊ¹ÓÃ³Ë»ýÌØÕ÷
-    threshold = FALSE,                           # ÊÇ·ñÊ¹ÓÃãÐÖµÌØÕ÷
-    hinge = TRUE,                               # ÊÇ·ñÊ¹ÓÃ½ÂÁ´ÌØÕ÷
-    betamultiplier = 5,                         # ¹æÔò»¯ÏµÊý±¶Êý
-    beta_lqp = -1.0,                            # ÏßÐÔ¡¢¶þ´ÎºÍ³Ë»ýÌØÕ÷µÄÕýÔò»¯ÏµÊý
-    beta_threshold = -1.0,                      # ãÐÖµÌØÕ÷µÄÕýÔò»¯ÏµÊý
-    beta_hinge = -1.0,                          # ½ÂÁ´ÌØÕ÷µÄÕýÔò»¯ÏµÊý
-    defaultprevalence = 0.5                     # ÎïÖÖµÄÄ¬ÈÏ·¢Éú¸ÅÂÊ
+  "_allData_allRun" = list(
+    path_to_maxent.jar = "./Maxent1",  # Path to the MaxEnt jar file or folder
+    memory_allocated = 1024,           # Memory allocated to MaxEnt, in MB
+    initial_heap_size = NULL,          # Initial Java heap size
+    max_heap_size = NULL,              # Maximum Java heap size
+    background_data_dir = "default",   # Background data setting
+    visible = FALSE,                   # Do not show the MaxEnt interface
+    linear = TRUE,                     # Use linear features
+    quadratic = TRUE,                  # Use quadratic features
+    product = FALSE,                   # Do not use product features
+    threshold = FALSE,                 # Do not use threshold features
+    hinge = TRUE,                      # Use hinge features
+    betamultiplier = 5,                # Regularization multiplier
+    beta_lqp = -1.0,                   # Default regularization for LQP features
+    beta_threshold = -1.0,             # Default regularization for threshold features
+    beta_hinge = -1.0,                 # Default regularization for hinge features
+    defaultprevalence = 0.5            # Default prevalence
   )
 )
 
 
 
-# ½«ÕâÐ©×Ô¶¨Òå²ÎÊý´«Èë bm_ModelingOptions
+############################################################
+# 6. Create biomod2 modelling options
+############################################################
+
+# Pass the user-defined MaxEnt parameters to biomod2.
 opt_maxent <- bm_ModelingOptions(
-  data.type = 'binary',                      # Êý¾ÝÀàÐÍ£º¶þ½øÖÆ
-  models = c('MAXENT'),                      # Ñ¡Ôñ MAXENT Ä£ÐÍ
-  strategy = 'user.defined',                 # Ê¹ÓÃ×Ô¶¨Òå²ÎÊý
-  user.val = list('MAXENT.binary.MAXENT.MAXENT' = user_maxent),  # Ê¹ÓÃÕýÈ·µÄÃüÃû
+  data.type = 'binary',                      # æ•°æ®ç±»åž‹ï¼šäºŒè¿›åˆ¶
+  models = c('MAXENT'),                      # é€‰æ‹© MAXENT æ¨¡åž‹
+  strategy = 'user.defined',                 # ä½¿ç”¨è‡ªå®šä¹‰å‚æ•°
+  user.val = list('MAXENT.binary.MAXENT.MAXENT' = user_maxent),  # ä½¿ç”¨æ­£ç¡®çš„å‘½å
 )
 
-# ²é¿´ MAXENT Ä£ÐÍµÄ×Ô¶¨Òå²ÎÊý
+############################################################
+# 7. Run MaxEnt modelling
+############################################################
+
+# Run MaxEnt models with k-fold cross-validation.
 opt_maxent@options$'MAXENT.binary.MAXENT.MAXENT'
 myBiomodModelOut <- BIOMOD_Modeling(
   bm.format = myBiomodData,
-  modeling.id = 'r1_road_ds.asc',
+  modeling.id = 'r1_new_road_ds',
   models = c('MAXENT'),
   CV.strategy = 'kfold',
   CV.nb.rep = 10,
   CV.perc = 0.75,
   CV.k = 5,
-  OPT.user =opt_maxent,  # Ñ¡ÔñÎÒÃÇ×Ô¼º¶¨ÒåµÄÄ£ÐÍ
+  OPT.user =opt_maxent,  
   metric.eval = c('TSS', 'ROC'),
   do.full.models = FALSE,
   nb.cpu = 200
 )
-#Ä¿Ç°³öÏÖÒ»¸öÎÊÌâ£º
+
+############################################################
+# 8. Extract and save model evaluation results
+############################################################
+
+# Extract model evaluation results.
 eval_df <- get_evaluations(myBiomodModelOut)
-write.csv(eval_df,"./r1_road_ds.asc.csv")
-#eval_df<-get_evaluations(myBiomodModelOut)
+
+# Save evaluation results.
+write.csv(eval_df,"./r1new_road_ds.csv")
+
+# Extract TSS values.
 tss_values <- eval_df[eval_df$metric.eval == "TSS", ]
+
+# Print TSS results for each model run.
 print(tss_values[, c("run", "calibration", "validation", "evaluation")])
+
+# Select the model with the highest validation TSS.
 max_tss_row <- tss_values[which.max(tss_values$validation), ]
 max_tss_model <- max_tss_row$full.name
 print(max_tss_model)
 
+############################################################
+# 9. Project the best MaxEnt model
+############################################################
+
+# Project the selected MaxEnt model to the environmental layers.
 my_projection <- BIOMOD_Projection(
-  bm.mod = myBiomodModelOut,  # Ä£ÐÍÊä³ö¶ÔÏó
-  new.env = envt.st ,                  # Í¶Ó°µÄ»·¾³Êý¾Ý£¨RasterStack»òRasterBrick¸ñÊ½£©
-  proj.name = 'Maxent_Projectionnew_r1road_ds.asc',     # ÏîÄ¿Ãû³Æ
-  selected.models = "MAXENT",          # Ñ¡ÔñÄ£ÐÍ
-  output.format = '.tif',  # Ö¸¶¨Êä³ö¸ñÊ½Îª .asc
+  bm.mod = myBiomodModelOut,  
+  new.env = envt.st ,                 
+  proj.name = 'Maxent_Projection_r1new_road_ds',    
+  selected.models = "MAXENT",        
+  output.format = '.tif',  
   metric.binary = 'TSS',
   metric.filter = 'TSS',
   build.clamping.mask = TRUE,
