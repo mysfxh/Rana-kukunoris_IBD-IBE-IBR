@@ -1,6 +1,5 @@
 ############################################################
 # MaxEnt species distribution modelling using biomod2
-# Simple English-annotated version based on the original script
 ############################################################
 
 
