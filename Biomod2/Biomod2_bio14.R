@@ -1,3 +1,12 @@
+############################################################
+# MaxEnt species distribution modelling using biomod2
+############################################################
+
+
+############################################################
+# 1. Load required packages
+############################################################
+
 library(terra)
 library(biomod2)
 library(raster)
@@ -6,71 +15,105 @@ library(tidyterra)
 library(ggplot2)
 library(dismo)
 library(doParallel)
-#setwd("D://BaiduSyncdisk//enmevalu7te_for_enmeval_2.0//enmevaluate_for_enmeval_2.0//")
-#setwd("/home/xiongh/Biomod2/")
-setwd("/home/xiongh/Biomod2/new/result_1//")
+
+############################################################
+# 2. Read species occurrence data
+############################################################
+
+# Read occurrence records.
+# The CSV file should contain three columns:
+# Species, X, and Y.
+# X = longitude, Y = latitude.
 points <- read.csv(file = "/home/xiongh/Biomod2/new/result_1/enmeval/GYLW_all.csv", header = T);
-points <- cbind(points, rep.int(1, length(nrow(points)))); #新生成一列代表当前存在的点
+
+# Add a response column.
+# Here, all records are presence records, so the response value is 1.
+points <- cbind(points, rep.int(1, length(nrow(points)))); 
+
+# Rename columns.
 colnames(points) <- c("Species", "X", "Y", "Response");
 
-# 假设你有环境变量数据 (如 BIOCLIM 数据)，存储在 myExpl 中
+############################################################
+# 3. Read environmental raster layers
+############################################################
+
 single_envt <- raster("/home/xiongh/Biomod2/new/result_1/env/bio_14.asc")
 
-envt.st <- stack(single_envt); # 读取栅格数据
+
+# Read environmental raster layers as a RasterStack.
+envt.st <- stack(single_envt); 
 myRespName <- 'Xionh'
-# 格式化数据
+print("Environmental layers were loaded successfully.")
 
+############################################################
+# 4. Format data for biomod2
+############################################################
 
-print("yes")
-
+# Format occurrence and environmental data for biomod2.
+# Presence records are coded as 1.
+# Pseudo-absence points are generated randomly.
 myBiomodData <- BIOMOD_FormatingData(
-  resp.var = ifelse(points[, 4] == 1, 1, NA),  # 将出现点的值设置为1，其他点设置为NA
+  resp.var = ifelse(points[, 4] == 1, 1, NA),  # 灏嗗嚭鐜扮偣鐨勫�艰缃负1锛屽叾浠栫偣璁剧疆涓篘A
   resp.xy = points[, 2:3],
   resp.name = as.character(points[1, 1]),
   expl.var = envt.st,
-  PA.nb.rep = 10,           # 设置生成伪缺失数据的重复次数
-  PA.nb.absences = 1000,    # 设置每次选择1000个伪缺失数据点
-  PA.strategy = "random",    # 设置伪缺失数据的选择策略，使用随机选择
-  filter.raster = TRUE
+  PA.nb.rep = 10,           # Number of pseudo-absence replicates
+  PA.nb.absences = 1000,    # Number of pseudo-absence points per replicate
+  PA.strategy = "random",   # Random pseudo-absence selection
+  filter.raster = TRUE      # Remove duplicated records in the same raster cell
 
 )
 
 
 
-# 定义 MAXENT 模型的自定义参数
-#setwd('D://Maxent//')
+############################################################
+# 5. Set custom MaxEnt parameters
+############################################################
+
+# Set the working directory for model output.
 setwd("/home/xiongh/Biomod2/new/result_1/")
+
+# Define user-specified MaxEnt settings.
 user_maxent <- list(
-  '_allData_allRun' = list(
-    path_to_maxent.jar = './Maxent1',  # MaxEnt JAR 文件路径
-    memory_allocated =1024,                     # 分配的内存（MB）
-    initial_heap_size = NULL,             # 初始堆内存大小
-    max_heap_size = NULL,                 # 最大堆内存大小
-    background_data_dir = "default",       # 背景数据目录
-    visible = FALSE,                            # 是否显示 MaxEnt 界面
-    linear = TRUE,                              # 是否使用线性特征
-    quadratic = TRUE,                           # 是否使用二次特征
-    product = FALSE,                             # 是否使用乘积特征
-    threshold = FALSE,                           # 是否使用阈值特征
-    hinge = TRUE,                               # 是否使用铰链特征
-    betamultiplier = 5,                         # 规则化系数倍数
-    beta_lqp = -1.0,                            # 线性、二次和乘积特征的正则化系数
-    beta_threshold = -1.0,                      # 阈值特征的正则化系数
-    beta_hinge = -1.0,                          # 铰链特征的正则化系数
-    defaultprevalence = 0.5                     # 物种的默认发生概率
+  "_allData_allRun" = list(
+    path_to_maxent.jar = "./Maxent1",  # Path to the MaxEnt jar file or folder
+    memory_allocated = 1024,           # Memory allocated to MaxEnt, in MB
+    initial_heap_size = NULL,          # Initial Java heap size
+    max_heap_size = NULL,              # Maximum Java heap size
+    background_data_dir = "default",   # Background data setting
+    visible = FALSE,                   # Do not show the MaxEnt interface
+    linear = TRUE,                     # Use linear features
+    quadratic = TRUE,                  # Use quadratic features
+    product = FALSE,                   # Do not use product features
+    threshold = FALSE,                 # Do not use threshold features
+    hinge = TRUE,                      # Use hinge features
+    betamultiplier = 5,                # Regularization multiplier
+    beta_lqp = -1.0,                   # Default regularization for LQP features
+    beta_threshold = -1.0,             # Default regularization for threshold features
+    beta_hinge = -1.0,                 # Default regularization for hinge features
+    defaultprevalence = 0.5            # Default prevalence
   )
 )
 
-# 将这些自定义参数传入 bm_ModelingOptions
+############################################################
+# 6. Create biomod2 modelling options
+############################################################
+
+# Pass the user-defined MaxEnt parameters to biomod2.
 opt_maxent <- bm_ModelingOptions(
-  data.type = 'binary',                      # 数据类型：二进制
-  models = c('MAXENT'),                      # 选择 MAXENT 模型
-  strategy = 'user.defined',                 # 使用自定义参数
-  user.val = list('MAXENT.binary.MAXENT.MAXENT' = user_maxent),  # 使用正确的命名
+  data.type = 'binary',                      
+  models = c('MAXENT'),                      
+  strategy = 'user.defined',                 
+  user.val = list('MAXENT.binary.MAXENT.MAXENT' = user_maxent), 
 )
 
-# 查看 MAXENT 模型的自定义参数
+# Check the MaxEnt options.
 opt_maxent@options$'MAXENT.binary.MAXENT.MAXENT'
+
+############################################################
+# 7. Run MaxEnt modelling
+############################################################
+# Run MaxEnt models with k-fold cross-validation.
 myBiomodModelOut <- BIOMOD_Modeling(
   bm.format = myBiomodData,
   modeling.id = 'r1_bio14',
@@ -79,27 +122,44 @@ myBiomodModelOut <- BIOMOD_Modeling(
   CV.nb.rep = 10,
   CV.perc = 0.75,
   CV.k = 5,
-  OPT.user =opt_maxent,  # 选择我们自己定义的模型
+  OPT.user =opt_maxent,  
   metric.eval = c('TSS', 'ROC'),
   do.full.models = FALSE,
   nb.cpu = 200
 )
-#目前出现一个问题：
+
+
+############################################################
+# 8. Extract and save model evaluation results
+############################################################
+
+# Extract model evaluation results
 eval_df <- get_evaluations(myBiomodModelOut)
+
+# Save evaluation results.
 write.csv(eval_df,"./r114.csv")
-#eval_df<-get_evaluations(myBiomodModelOut)
+
+# Extract TSS values.
 tss_values <- eval_df[eval_df$metric.eval == "TSS", ]
+
+# Print TSS results for each model run.
 print(tss_values[, c("run", "calibration", "validation", "evaluation")])
+
+# Select the model with the highest validation TSS.
 max_tss_row <- tss_values[which.max(tss_values$validation), ]
 max_tss_model <- max_tss_row$full.name
 print(max_tss_model)
 
+############################################################
+# 9. Project the best MaxEnt model
+############################################################
+
 my_projection <- BIOMOD_Projection(
-  bm.mod = myBiomodModelOut,  # 模型输出对象
-  new.env = envt.st ,                  # 投影的环境数据（RasterStack或RasterBrick格式）
-  proj.name = 'Maxent_Projection_r1bio14',     # 项目名称
-  selected.models = "MAXENT",          # 选择模型
-  output.format = '.tif',  # 指定输出格式为 .asc
+  bm.mod = myBiomodModelOut,  
+  new.env = envt.st ,                  
+  proj.name = 'Maxent_Projection_r1bio14',     
+  selected.models = "MAXENT",          
+  output.format = '.tif',  
   metric.binary = 'TSS',
   metric.filter = 'TSS',
   build.clamping.mask = TRUE,
