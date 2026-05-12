@@ -6,7 +6,7 @@ ENMeval – Evaluation outputs for selecting optimal MaxEnt model parameters.
 
 Mantel_MRM – Scripts for Mantel tests, MRM analyses, and variation partitioning.
 
-raw_table – Raw data tables for the overall dataset and regional analyses (ALL, E, N, and S).
+raw_table – Raw data tables for the overall dataset and regional analyses (mantel and mrm).
 
 GYLW – Sample data used for phylogeographic and lineage-level analyses across regions.
 
